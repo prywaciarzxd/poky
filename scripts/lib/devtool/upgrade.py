@@ -16,6 +16,7 @@ import argparse
 import scriptutils
 import errno
 import bb
+import pickle
 
 devtool_path = os.path.dirname(os.path.realpath(__file__)) + '/../../../meta/lib'
 sys.path = sys.path + [devtool_path]
@@ -502,8 +503,16 @@ def _generate_license_diff(old_licenses, new_licenses):
 def upgrade(args, config, basepath, workspace):
     """Entry point for the devtool 'upgrade' subcommand"""
 
-    if args.recipename in workspace:
-        raise DevtoolError("recipe %s is already in your workspace" % args.recipename)
+    does_exist = False
+
+    if "_" in args.recipename:
+        version = args.recipename.split("_")[1]
+        args.recipename = args.recipename.split("_")[0]
+        name = args.recipename + "_" + version
+
+    
+    if name in workspace:
+        raise DevtoolError("recipe %s is already in your workspace" % name)
     if args.srcbranch and not args.srcrev:
         raise DevtoolError("If you specify --srcbranch/-B then you must use --srcrev/-S to specify the revision" % args.recipename)
 
@@ -516,18 +525,14 @@ def upgrade(args, config, basepath, workspace):
             return 1
 
         pn = rd.getVar('PN')
+                
         if pn != args.recipename:
             logger.info('Mapping %s to %s' % (args.recipename, pn))
-        if pn in workspace:
-            raise DevtoolError("recipe %s is already in your workspace" % pn)
-
-        if args.srctree:
-            srctree = os.path.abspath(args.srctree)
-        else:
-            srctree = standard.get_default_srctree(config, pn)
-
-        srctree_s = standard.get_real_srctree(srctree, rd.getVar('S'), rd.getVar('WORKDIR'))
-
+        if name in workspace:
+            raise DevtoolError("recipe %s is already in your workspace" % name)
+        
+        old_ver = rd.getVar('PV')
+        
         # try to automatically discover latest version and revision if not provided on command line
         if not args.version and not args.srcrev:
             version_info = oe.recipeutils.get_recipe_upstream_version(rd)
@@ -537,20 +542,50 @@ def upgrade(args, config, basepath, workspace):
                 args.srcrev = version_info['revision']
         if not args.version and not args.srcrev:
             raise DevtoolError("Automatic discovery of latest version/revision failed - you must provide a version using the --version/-V option, or for recipes that fetch from an SCM such as git, the --srcrev/-S option.")
+        
+        with open('/yocto/mateusz/good/poky/build/conf/local.conf', 'r') as file:
+            lines = file.readlines()
 
+        for i in range(len(lines)):
+            if lines[i].startswith(f'PREFERRED_VERSION_{args.recipename}'):
+                lines[i] = f'PREFERRED_VERSION_{args.recipename}="{args.version}"\n'
+                does_exist = True
+
+        with open('/yocto/mateusz/good/poky/build/conf/local.conf', 'w') as file:
+            file.writelines(lines)
+
+        if not(does_exist):
+            with open('/yocto/mateusz/good/poky/build/conf/local.conf', 'a') as file:
+                file.write(f'PREFERRED_VERSION_{args.recipename}="{args.version}"')
+        
         standard._check_compatible_recipe(pn, rd)
         old_srcrev = rd.getVar('SRCREV')
         if old_srcrev == 'INVALID':
             old_srcrev = None
         if old_srcrev and not args.srcrev:
             raise DevtoolError("Recipe specifies a SRCREV value; you must specify a new one when upgrading")
-        old_ver = rd.getVar('PV')
-        if old_ver == args.version and old_srcrev == args.srcrev:
-            raise DevtoolError("Current and upgrade versions are the same version")
+        
+        
+              
         if args.version:
             if bb.utils.vercmp_string(args.version, old_ver) < 0:
                 logger.warning('Upgrade version %s compares as less than the current version %s. If you are using a package feed for on-target upgrades or providing this recipe for general consumption, then you should increment PE in the recipe (or if there is no current PE value set, set it to "1")' % (args.version, old_ver))
             check_prerelease_version(args.version, 'devtool upgrade')
+        #if old_ver == args.version and old_srcrev == args.srcrev:
+            #raise DevtoolError("Current and upgrade versions are the same version")
+        
+        if args.srctree:
+            srctree = os.path.abspath(args.srctree + f'/{args.recipename}_{args.version}')
+            try:
+                os.rmdir(args.srctree + f'/{args.recipename}_{version}')
+                print(f'This dir has been deleted')
+            except:
+                print('There was an error, couldnt remove selected directory')
+        else:
+            srctree = standard.get_default_srctree(config, args.recipename + "_" + str(args.version))
+
+        srctree_s = standard.get_real_srctree(srctree, rd.getVar('S'), rd.getVar('WORKDIR'))
+          
 
         rf = None
         license_diff = None
@@ -585,6 +620,18 @@ def upgrade(args, config, basepath, workspace):
             logger.warning('Version is pinned to %s via PREFERRED_VERSION; it may need adjustment to match the new version before any further steps are taken' % preferred_version)
     finally:
         tinfoil.shutdown()
+    filename = 'my_variable.pkl'
+    if os.path.getsize(filename) > 0:
+        with open(filename, 'rb') as f:
+            my_variable = pickle.load(f)
+    else:
+        my_variable = {}
+    workspace[args.recipename + "_" + version] = {'srctreebase': srctreebase, 'srctree': srctree, 'bbappend': appendfile, 'recipefile': recipefile}    
+    
+    if args.recipename + "_" + version not in my_variable:
+        with open(filename, 'wb') as f:
+            my_variable[args.recipename + "_" + version] = workspace[args.recipename + "_" + version]
+            pickle.dump(my_variable, f)
     return 0
 
 def latest_version(args, config, basepath, workspace):

@@ -43,6 +43,29 @@ def _get_build_tasks(config):
 
 def build(args, config, basepath, workspace):
     """Entry point for the devtool 'build' subcommand"""
+    
+    does_exist = False
+
+    if "_" in args.recipename:
+        version = args.recipename.split("_")[1]
+        args.recipename = args.recipename.split("_")[0]
+        name = args.recipename + "_" + version
+
+    with open('/yocto/mateusz/good/poky/build/conf/local.conf', 'r') as file:
+        lines = file.readlines()
+
+    for i in range(len(lines)):
+        if lines[i].startswith(f'PREFERRED_VERSION_{args.recipename}'):
+            lines[i] = f'PREFERRED_VERSION_{args.recipename}="{version}"\n'
+            does_exist = True
+
+    with open('/yocto/mateusz/good/poky/build/conf/local.conf', 'w') as file:
+        file.writelines(lines)
+
+    if not(does_exist):
+        with open('/yocto/mateusz/good/poky/build/conf/local.conf', 'a') as file:
+            file.write(f'PREFERRED_VERSION_{args.recipename}="{version}"')
+
     workspacepn = check_workspace_recipe(workspace, args.recipename, bbclassextend=True)
     tinfoil = setup_tinfoil(config_only=False, basepath=basepath)
     try:

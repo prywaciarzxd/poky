@@ -31,19 +31,60 @@ override_branch_prefix = 'devtool-override-'
 def add(args, config, basepath, workspace):
     """Entry point for the devtool 'add' subcommand"""
     import bb
-    import oe.recipeutils  
-  
-    does_Exist = False
- 
+    import oe.recipeutils
+    
+    does_exist = False
+    
     if "_" in args.recipename:
         version = args.recipename.split("_")[1]
-        args.recipename = args.recipename.split("_")[0] 
+        args.recipename = args.recipename.split("_")[0]
         name = args.recipename + "_" + version
-        args.srctree = f'/yocto/mateusz/good/poky/build/workspace/sources/{name}'
-        
+    
+    for dirpath, dirnames, filenames in os.walk('/yocto/mateusz/good/poky/meta/'):
+        if args.recipename in dirnames:
+            bb_dir_path = os.path.join(dirpath, args.recipename)
+            bb_file_path = bb_dir_path + "/" +  args.recipename + "_" + version + ".bb"
+            break
+
+    file_path = os.path.join(f'/yocto/mateusz/good/poky/build/workspace/recipes/{args.recipename}/', '{args.recipename}_{version}.bb')
+
+    if os.path.exists(file_path):
+        os.remove(file_path)
+        print(f"File {bb_file_path} has been removed.")
+    else:
+        print(f"File {bb_file_path} does not exist.")
+
+
+    with open(bb_file_path, 'r') as file:
+        lines = file.readlines()
+
+    if not args.srctree:
+        for i in range(len(lines)):
+          if lines[i].startswith(f'SRC_URI = '):
+              if '\\' in lines[i]:
+                  x = lines[i].replace(" \\", '"').split(" = ")[1]
+                  args.fetchuri = x.replace("\n", "")
+              else:
+                  args.fetchuri = lines[i].split(" = ")[1].replace("\n", '')
+    
+    with open('/yocto/mateusz/good/poky/build/conf/local.conf', 'r') as file:
+        lines = file.readlines()
+
+    for i in range(len(lines)):
+        if lines[i].startswith(f'PREFERRED_VERSION_{args.recipename}'):
+            lines[i] = f'PREFERRED_VERSION_{args.recipename}="{version}"\n'
+            does_exist = True
+
+    with open('/yocto/mateusz/good/poky/build/conf/local.conf', 'w') as file:
+        file.writelines(lines)
+    
+    if not(does_exist):
+        with open('/yocto/mateusz/good/poky/build/conf/local.conf', 'a') as file:
+            file.write(f'PREFERRED_VERSION_{args.recipename}="{version}"')
+
     if not args.recipename and not args.srctree and not args.fetch and not args.fetchuri:
         raise argparse_oe.ArgumentUsageError('At least one of recipename, srctree, fetchuri or -f/--fetch must be specified', 'add')
-
+    
     # These are positional arguments, but because we're nice, allow
     # specifying e.g. source tree without name, or fetch URI without name or
     # source tree (if we can detect that that is what the user meant)
@@ -60,10 +101,10 @@ def add(args, config, basepath, workspace):
             args.fetchuri = args.srctree
             args.srctree = ''
     elif args.recipename and not args.srctree:
-        if os.sep in args.recipename:
-            args.srctree = args.recipename
-            args.recipename = None
-        elif os.path.isdir(args.recipename):
+        args.srctree = '/yocto/mateusz/good/poky/build/workspace/sources'
+        srctree = os.path.abspath(args.srctree + f'/{name}')
+            
+        if os.path.isdir(args.recipename):
             logger.warning('Ambiguous argument "%s" - assuming you mean it to be the recipe name' % args.recipename)
 
     if not args.fetchuri:
@@ -82,14 +123,17 @@ def add(args, config, basepath, workspace):
         else:
             logger.warning('-f/--fetch option is deprecated - you can now simply specify the URL to fetch as a positional argument instead')
             args.fetchuri = args.fetch
-
+    
     if args.recipename:
         if name in workspace:
             raise DevtoolError("recipe %s is already in your workspace" %
-                               args.recipename)
-        
+                               name)
+        reason = oe.recipeutils.validate_pn(args.recipename)
+        if reason:
+            raise DevtoolError(reason)
+
     if args.srctree:
-        srctree = os.path.abspath(args.srctree)
+        srctree = os.path.abspath(args.srctree + f'/{name}')
         srctreeparent = None
         tmpsrcdir = None
     else:
@@ -119,7 +163,7 @@ def add(args, config, basepath, workspace):
         else:
             raise DevtoolError("You must either specify a source tree "
                                "or a URI to fetch source from")
-
+    
     if args.version:
         if '_' in args.version or ' ' in args.version:
             raise DevtoolError('Invalid version string "%s"' % args.version)
@@ -174,7 +218,7 @@ def add(args, config, basepath, workspace):
         if recipes:
             recipename = os.path.splitext(os.path.basename(recipes[0]))[0].split('_')[0]
             if name in workspace:
-                raise DevtoolError('A recipe with the same name as the one being created (%s) already exists in your workspace' % name)
+                raise DevtoolError('A recipe with the same name as the one being created (%s) already exists in your workspace' % recipename)
             recipedir = os.path.join(config.workspace_path, 'recipes', name)
             bb.utils.mkdirhier(recipedir)
             recipefile = os.path.join(recipedir, os.path.basename(recipes[0]))
@@ -185,7 +229,7 @@ def add(args, config, basepath, workspace):
             if os.path.exists(recipefile):
                 raise DevtoolError('A recipe file %s already exists in your workspace; this shouldn\'t be there - please delete it before continuing' % recipefile)
             if tmpsrcdir:
-                srctree = os.path.join(srctreeparent, name)
+                srctree = os.path.join(srctreeparent, recipename)
                 if os.path.exists(tmpsrcdir):
                     if os.path.exists(srctree):
                         if os.path.isdir(srctree):
@@ -298,7 +342,6 @@ def add(args, config, basepath, workspace):
         tinfoil.shutdown()
     
     return 0
-
 
 def _check_compatible_recipe(pn, d):
     """Check if the recipe is supported by devtool"""
@@ -786,9 +829,8 @@ def modify(args, config, basepath, workspace):
     import oe.recipeutils
     import oe.patch
     import oe.path
-
+    
     does_Exist = False
-
     split_me = args.recipename.split('_')
     args.recipename = split_me[0]
     version = split_me[1]
@@ -797,18 +839,17 @@ def modify(args, config, basepath, workspace):
         lines = file.readlines()
 
     for i in range(len(lines)):
-       if lines[i].startswith(f'PREFERRED_VERSION_{args.recipename}'):
-           lines[i] = f'PREFERRED_VERSION_{args.recipename}="{version}"\n'
-           does_Exist = True
+        if lines[i].startswith(f'PREFERRED_VERSION_{args.recipename}'):
+            lines[i] = f'PREFERRED_VERSION_{args.recipename}="{version}"\n'
+            does_Exist = True
     
 # Zapisujemy zmienioną zawartość pliku
     with open('/yocto/mateusz/good/poky/build/conf/local.conf', 'w') as file:
         file.writelines(lines)
     
     if does_Exist == False:
-       with open('/yocto/mateusz/good/poky/build/conf/local.conf', 'a') as file:
-           file.write(f'PREFERRED_VERSION_{args.recipename}="{version}"\n')
-        
+        with open('/yocto/mateusz/good/poky/build/conf/local.conf', 'a') as file:
+            file.write(f'PREFERRED_VERSION_{args.recipename}="{version}"\n')
    
     tinfoil = setup_tinfoil(basepath=basepath, tracking=True)
     try:
@@ -819,11 +860,13 @@ def modify(args, config, basepath, workspace):
    
         pn = rd.getVar('PN')
         pv = split_me[1]
-        name = pn + "_" + pv	        
+        name = pn + "_" + pv	
+        
         if args.srctree:
-           srctree = os.path.abspath(args.srctree + f'/{name}')
+            srctree = os.path.abspath(args.srctree + f'/{name}')
         else:
-           srctree = get_default_srctree(config, name)
+            srctree = get_default_srctree(config, pn + "_" + pv)
+
         if args.no_extract and not os.path.isdir(srctree):
             raise DevtoolError("--no-extract specified and source path %s does "
                             "not exist or is not a directory" %
@@ -1005,20 +1048,19 @@ def modify(args, config, basepath, workspace):
 
     finally:
         tinfoil.shutdown()
-    
     filename = 'my_variable.pkl'
     if os.path.getsize(filename) > 0:
-       with open(filename, 'rb') as f:
+        with open(filename, 'rb') as f:
             my_variable = pickle.load(f)
     else:
         my_variable = {}
-        
     workspace[args.recipename + "_" + version] = {'srctreebase': srctreebase, 'srctree': srctree, 'bbappend': appendfile, 'recipefile': recipefile}    
     
     if args.recipename + "_" + version not in my_variable:
         with open(filename, 'wb') as f:
             my_variable[args.recipename + "_" + version] = workspace[args.recipename + "_" + version]
             pickle.dump(my_variable, f)
+    
     
     return 0
 
@@ -1027,31 +1069,41 @@ def rename(args, config, basepath, workspace):
     """Entry point for the devtool 'rename' subcommand"""
     import bb
     import oe.recipeutils
-    workspace = does_recipe_exist()
     
-    if "_" in args.recipename and "_" in args.newname:
-        old_version = args.recipename.split("_")[1]
-        args.recipename = args.recipename.split("_")[0]
-        old_full_name = args.recipename + "_" + old_version
+    with open('/yocto/mateusz/good/poky/build/conf/local.conf', 'r') as f:
+        lines = f.readlines()
+    
+    for i in range(len(lines)):
+        if lines[i].startswith('MY_WORKSPACE_'):
+            print(lines[i]) 
+    
+    
+    does_Exist = False
+    split_me = args.recipename.split('_')
+    args.recipename = split_me[0]
+    args.version = split_me[1]
+    new_version = args.newname.split('_')[1]
+    args.newname = args.newname.split('_')[0]
+    
+    
+    check_workspace_recipe(workspace, args.recipename)
 
-        new_version = args.newname.split("_")[1]
-        args.newname = args.recipename.split("_")[0]
-        new_full_name = args.newname + "_" + new_version
- 
-    check_workspace_recipe(workspace, old_full_name)
-    
     if not (args.newname or args.version):
         raise DevtoolError('You must specify a new name, a version with -V/--version, or both')
 
-    recipefile = workspace[old_full_name]['recipefile']
-    
+    recipefile = workspace[args.recipename]['recipefile']
     if not recipefile:
         raise DevtoolError('devtool rename can only be used where the recipe file itself is in the workspace (e.g. after devtool add)')
-      
-    if old_full_name != new_full_name:
-        newname = args.newname
 
-    append = workspace[old_full_name]['bbappend']
+    if args.newname and args.newname != args.recipename:
+        reason = oe.recipeutils.validate_pn(args.newname)
+        if reason:
+            raise DevtoolError(reason)
+        newname = args.newname
+    else:
+        newname = args.recipename
+
+    append = workspace[args.recipename]['bbappend']
     appendfn = os.path.splitext(os.path.basename(append))[0]
     splitfn = appendfn.split('_')
     if len(splitfn) > 1:
@@ -1063,7 +1115,6 @@ def rename(args, config, basepath, workspace):
     tinfoil = setup_tinfoil(basepath=basepath, tracking=True)
     try:
         rd = parse_recipe(config, tinfoil, args.recipename, True)
-        print(rd)
         if not rd:
             return 1
 
@@ -1220,6 +1271,7 @@ def rename(args, config, basepath, workspace):
                     entry = '|'.join(splitentry) + '\n'
             f.write(entry)
     return 0
+
 
 def _get_patchset_revs(srctree, recipe_path, initial_rev=None, force_patch_refresh=False):
     """Get initial and update rev of a recipe. These are the start point of the
@@ -1920,30 +1972,20 @@ def update_recipe(args, config, basepath, workspace):
 
     return 0
 
-def does_recipe_exist():
-    filename = 'my_variable.pkl'
-    keys_to_delete = []
-    with open(filename, 'rb') as f:
-        workspace = pickle.load(f)
-    for key in workspace.keys():
-        if not os.path.exists(f'/yocto/mateusz/good/poky/build/workspace/sources/{key}'):
-            keys_to_delete.append(key)
-    for key in keys_to_delete:
-        del workspace[key]
-    
-    return workspace    
 
 def status(args, config, basepath, workspace):
     """Entry point for the devtool 'status' subcommand"""
-    workspace = does_recipe_exist()
+    filename = 'my_variable.pkl'
+    with open(filename, 'rb') as f:
+        workspace = pickle.load(f)
     if workspace:
-       for recipe, value in sorted(workspace.items()):
-           recipefile = value['recipefile']
-           if recipefile:
-               recipestr = ' (%s)' % recipefile
-           else:
-               recipestr = ''
-           print("%s: %s%s" % (recipe, value['srctree'], recipestr))
+        for recipe, value in sorted(workspace.items()):
+            recipefile = value['recipefile']
+            if recipefile:
+                recipestr = ' (%s)' % recipefile
+            else:
+                recipestr = ''
+            print("%s: %s%s" % (recipe, value['srctree'], recipestr))
     else:
         logger.info('No recipes currently in your workspace - you can use "devtool modify" to work on an existing recipe or "devtool add" to add a new one')
     

@@ -8,7 +8,7 @@ LIC_FILES_CHKSUM = "file://COPYING;md5=e0206ac9471d06667e076212db20c5f4"
 
 DEPENDS = "virtual/libiconv"
 
-SRC_URI = "http://ftp.rpm.org/popt/releases/popt-1.x/${BP}.tar.gz \
+SRC_URI = "http://ftp.rpm.org/popt/releases/popt-1.x/popt-1.19.tar.gz \
            file://run-ptest \
            "
 SRC_URI[sha256sum] = "c25a4838fc8e4c1c8aacb8bd620edb3084a3d63bf8987fdad3ca2758c63240f9"
