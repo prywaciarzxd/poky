@@ -27,7 +27,7 @@ from devtool import parse_recipe
 logger = logging.getLogger('devtool')
 
 override_branch_prefix = 'devtool-override-'
-
+    
 def add(args, config, basepath, workspace):
     """Entry point for the devtool 'add' subcommand"""
     import bb
@@ -68,7 +68,7 @@ def add(args, config, basepath, workspace):
             raise DevtoolError('The -S/--srcrev option is only valid when fetching from an SCM repository')
         if args.srcbranch:
             raise DevtoolError('The -B/--srcbranch option is only valid when fetching from an SCM repository')
-
+    
     if args.srctree and os.path.isfile(args.srctree):
         args.fetchuri = 'file://' + os.path.abspath(args.srctree)
         args.srctree = ''
@@ -81,7 +81,7 @@ def add(args, config, basepath, workspace):
             args.fetchuri = args.fetch
 
     if args.recipename:
-        if args.recipename in workspace:
+        if full_name in workspace:
             raise DevtoolError("recipe %s is already in your workspace" %
                                args.recipename)
         reason = oe.recipeutils.validate_pn(args.recipename)
@@ -173,7 +173,7 @@ def add(args, config, basepath, workspace):
 
         recipes = glob.glob(os.path.join(tempdir, '*.bb'))
         if recipes:
-            recipename = os.path.splitext(os.path.basename(recipes[0]))[0].split('_')[0]
+            recipename = os.path.splitext(os.path.basename(recipes[0]))[0].split('_')[0] 
             if full_name in workspace:
                 raise DevtoolError('A recipe with the same name as the one being created (%s) already exists in your workspace' % recipename)
             recipedir = os.path.join(config.workspace_path, 'recipes', full_name)
@@ -186,7 +186,7 @@ def add(args, config, basepath, workspace):
             if os.path.exists(recipefile):
                 raise DevtoolError('A recipe file %s already exists in your workspace; this shouldn\'t be there - please delete it before continuing' % recipefile)
             if tmpsrcdir:
-                srctree = os.path.join(srctreeparent, recipename)
+                srctree = os.path.join(srctreeparent, full_name)
                 if os.path.exists(tmpsrcdir):
                     if os.path.exists(srctree):
                         if os.path.isdir(srctree):
@@ -297,7 +297,8 @@ def add(args, config, basepath, workspace):
 
     finally:
         tinfoil.shutdown()
-
+        #CHECKING ARE THE KEYS VALUES ARE OKAY not just apr but for example apr_1.7.2
+        print(workspace)
     return 0
 
 def _check_compatible_recipe(pn, d):
@@ -703,7 +704,7 @@ def _extract_source(srctree, keep_temp, devbranch, sync, config, basepath, works
 def _add_md5(config, recipename, filename):
     """Record checksum of a file (or recursively for a directory) to the md5-file of the workspace"""
     import bb.utils
-
+    
     def addfile(fn):
         md5 = bb.utils.md5_file(fn)
         with open(os.path.join(config.workspace_path, '.devtool_md5'), 'a+') as f:
@@ -1027,29 +1028,43 @@ def rename(args, config, basepath, workspace):
     """Entry point for the devtool 'rename' subcommand"""
     import bb
     import oe.recipeutils
-    workspace = does_recipe_exist()
+    workspace_1 = {}
+    for key,value in workspace.items():
+        if "_" not in key:
+            srctree_path = workspace[key]['srctree']
+            version = srctree_path.rsplit('/', 1)[-1].rsplit('_', 1)[-1]
+            new_key = key + "_" + version
+            workspace_1[key + "_" + version] = workspace[key]
+
+    workspace = workspace_1
+    workspace['vim_8.2']['recipefile'] = '/yocto/mateusz/good/poky/build/workspace/recipes/vim_7.4/vim_7.4.bb'
     
     if "_" in args.recipename and "_" in args.newname:
         old_version = args.recipename.split("_")[1]
         args.recipename = args.recipename.split("_")[0]
-        old_full_name = args.recipename + "_" + old_version
+        old_full_name = args.recipename + "_" + old_version        
 
         new_version = args.newname.split("_")[1]
-        args.newname = args.recipename.split("_")[0]
-        new_full_name = args.newname + "_" + new_version
- 
+        args.newname = args.newname.split("_")[0]
+        new_full_name = args.newname + "_" + args.newname
+
     check_workspace_recipe(workspace, old_full_name)
     
+
     if not (args.newname or args.version):
         raise DevtoolError('You must specify a new name, a version with -V/--version, or both')
 
     recipefile = workspace[old_full_name]['recipefile']
-    
     if not recipefile:
         raise DevtoolError('devtool rename can only be used where the recipe file itself is in the workspace (e.g. after devtool add)')
-      
-    if old_full_name != new_full_name:
+
+    if args.newname and args.newname != args.recipename:
+        reason = oe.recipeutils.validate_pn(args.newname)
+        if reason:
+            raise DevtoolError(reason)
         newname = args.newname
+    else:
+        newname = args.recipename
 
     append = workspace[old_full_name]['bbappend']
     appendfn = os.path.splitext(os.path.basename(append))[0]
@@ -1062,8 +1077,7 @@ def rename(args, config, basepath, workspace):
     recipefilemd5 = None
     tinfoil = setup_tinfoil(basepath=basepath, tracking=True)
     try:
-        rd = parse_recipe(config, tinfoil, args.recipename, True)
-        print(rd)
+        rd = parse_recipe(config, tinfoil, old_full_name, True)
         if not rd:
             return 1
 
@@ -1935,7 +1949,16 @@ def does_recipe_exist():
 
 def status(args, config, basepath, workspace):
     """Entry point for the devtool 'status' subcommand"""
-    workspace = does_recipe_exist()
+    workspace_1 = {}
+    for key,value in workspace.items():
+        if "_" not in key:
+            srctree_path = workspace[key]['srctree']
+            version = srctree_path.rsplit('/', 1)[-1].rsplit('_', 1)[-1]
+            new_key = key + "_" + version
+            workspace_1[key + "_" + version] = workspace[key]
+            
+    workspace = workspace_1
+    print(workspace)
     if workspace:
        for recipe, value in sorted(workspace.items()):
            recipefile = value['recipefile']
