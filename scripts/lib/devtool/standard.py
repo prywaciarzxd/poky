@@ -31,16 +31,13 @@ override_branch_prefix = 'devtool-override-'
 def add(args, config, basepath, workspace):
     """Entry point for the devtool 'add' subcommand"""
     import bb
-    import oe.recipeutils  
-  
-    does_Exist = False
- 
+    import oe.recipeutils
+    
     if "_" in args.recipename:
         version = args.recipename.split("_")[1]
-        args.recipename = args.recipename.split("_")[0] 
-        name = args.recipename + "_" + version
-        args.srctree = f'/yocto/mateusz/good/poky/build/workspace/sources/{name}'
-        
+        args.recipename = args.recipename.split("_")[0]
+        full_name = args.recipename + "_" + version
+
     if not args.recipename and not args.srctree and not args.fetch and not args.fetchuri:
         raise argparse_oe.ArgumentUsageError('At least one of recipename, srctree, fetchuri or -f/--fetch must be specified', 'add')
 
@@ -84,16 +81,20 @@ def add(args, config, basepath, workspace):
             args.fetchuri = args.fetch
 
     if args.recipename:
-        if name in workspace:
+        if args.recipename in workspace:
             raise DevtoolError("recipe %s is already in your workspace" %
                                args.recipename)
-        
+        reason = oe.recipeutils.validate_pn(args.recipename)
+        if reason:
+            raise DevtoolError(reason)
+
     if args.srctree:
-        srctree = os.path.abspath(args.srctree)
+        srctree = os.path.abspath(args.srctree + full_name)
         srctreeparent = None
         tmpsrcdir = None
     else:
-        srctreeparent = get_default_srctree(config, name)
+        srctree = None
+        srctreeparent = get_default_srctree(config, full_name)
         bb.utils.mkdirhier(srctreeparent)
         tmpsrcdir = tempfile.mkdtemp(prefix='devtoolsrc', dir=srctreeparent)
 
@@ -173,9 +174,9 @@ def add(args, config, basepath, workspace):
         recipes = glob.glob(os.path.join(tempdir, '*.bb'))
         if recipes:
             recipename = os.path.splitext(os.path.basename(recipes[0]))[0].split('_')[0]
-            if name in workspace:
-                raise DevtoolError('A recipe with the same name as the one being created (%s) already exists in your workspace' % name)
-            recipedir = os.path.join(config.workspace_path, 'recipes', name)
+            if full_name in workspace:
+                raise DevtoolError('A recipe with the same name as the one being created (%s) already exists in your workspace' % recipename)
+            recipedir = os.path.join(config.workspace_path, 'recipes', full_name)
             bb.utils.mkdirhier(recipedir)
             recipefile = os.path.join(recipedir, os.path.basename(recipes[0]))
             appendfile = recipe_to_append(recipefile, config)
@@ -185,7 +186,7 @@ def add(args, config, basepath, workspace):
             if os.path.exists(recipefile):
                 raise DevtoolError('A recipe file %s already exists in your workspace; this shouldn\'t be there - please delete it before continuing' % recipefile)
             if tmpsrcdir:
-                srctree = os.path.join(srctreeparent, name)
+                srctree = os.path.join(srctreeparent, recipename)
                 if os.path.exists(tmpsrcdir):
                     if os.path.exists(srctree):
                         if os.path.isdir(srctree):
@@ -296,9 +297,8 @@ def add(args, config, basepath, workspace):
 
     finally:
         tinfoil.shutdown()
-    
-    return 0
 
+    return 0
 
 def _check_compatible_recipe(pn, d):
     """Check if the recipe is supported by devtool"""
