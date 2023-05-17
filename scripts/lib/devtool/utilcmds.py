@@ -48,6 +48,7 @@ def find_recipe(args, config, basepath, workspace):
 
 def edit_recipe(args, config, basepath, workspace):
     """Entry point for the devtool 'edit-recipe' subcommand"""
+    
     return scriptutils.run_editor(_find_recipe_path(args, config, basepath, workspace), logger)
 
 

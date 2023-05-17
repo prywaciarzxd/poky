@@ -49,7 +49,7 @@ def build(args, config, basepath, workspace):
     if "_" in args.recipename:
         version = args.recipename.split("_")[1]
         args.recipename = args.recipename.split("_")[0]
-        name = args.recipename + "_" + version
+        full_name = args.recipename + "_" + version
 
     with open('/yocto/mateusz/good/poky/build/conf/local.conf', 'r') as file:
         lines = file.readlines()
@@ -66,7 +66,7 @@ def build(args, config, basepath, workspace):
         with open('/yocto/mateusz/good/poky/build/conf/local.conf', 'a') as file:
             file.write(f'PREFERRED_VERSION_{args.recipename}="{version}"')
 
-    workspacepn = check_workspace_recipe(workspace, args.recipename, bbclassextend=True)
+    workspacepn = check_workspace_recipe(workspace, full_name, bbclassextend=True)
     tinfoil = setup_tinfoil(config_only=False, basepath=basepath)
     try:
         rd = parse_recipe(config, tinfoil, args.recipename, appends=True, filter_workspace=False)

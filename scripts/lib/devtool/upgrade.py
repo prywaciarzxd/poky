@@ -312,7 +312,8 @@ def _create_new_recipe(newpv, md5, sha256, srcrev, srcbranch, srcsubdir_old, src
     """Creates the new recipe under workspace"""
 
     bpn = rd.getVar('BPN')
-    path = os.path.join(workspace, 'recipes', bpn)
+    path = os.path.join(workspace, f'recipes', bpn + "_" + newpv)
+    
     bb.utils.mkdirhier(path)
     copied, _ = oe.recipeutils.copy_recipe_files(rd, path, all_variants=True)
     if not copied:
@@ -503,16 +504,15 @@ def _generate_license_diff(old_licenses, new_licenses):
 def upgrade(args, config, basepath, workspace):
     """Entry point for the devtool 'upgrade' subcommand"""
 
-    does_exist = False
+   
 
     if "_" in args.recipename:
         version = args.recipename.split("_")[1]
         args.recipename = args.recipename.split("_")[0]
-        name = args.recipename + "_" + version
+        full_name = args.recipename + "_" + version
 
     
-    if name in workspace:
-        raise DevtoolError("recipe %s is already in your workspace" % name)
+    
     if args.srcbranch and not args.srcrev:
         raise DevtoolError("If you specify --srcbranch/-B then you must use --srcrev/-S to specify the revision" % args.recipename)
 
@@ -528,10 +528,8 @@ def upgrade(args, config, basepath, workspace):
                 
         if pn != args.recipename:
             logger.info('Mapping %s to %s' % (args.recipename, pn))
-        if name in workspace:
-            raise DevtoolError("recipe %s is already in your workspace" % name)
         
-        old_ver = rd.getVar('PV')
+        old_ver = version
         
         # try to automatically discover latest version and revision if not provided on command line
         if not args.version and not args.srcrev:
@@ -543,20 +541,6 @@ def upgrade(args, config, basepath, workspace):
         if not args.version and not args.srcrev:
             raise DevtoolError("Automatic discovery of latest version/revision failed - you must provide a version using the --version/-V option, or for recipes that fetch from an SCM such as git, the --srcrev/-S option.")
         
-        with open('/yocto/mateusz/good/poky/build/conf/local.conf', 'r') as file:
-            lines = file.readlines()
-
-        for i in range(len(lines)):
-            if lines[i].startswith(f'PREFERRED_VERSION_{args.recipename}'):
-                lines[i] = f'PREFERRED_VERSION_{args.recipename}="{args.version}"\n'
-                does_exist = True
-
-        with open('/yocto/mateusz/good/poky/build/conf/local.conf', 'w') as file:
-            file.writelines(lines)
-
-        if not(does_exist):
-            with open('/yocto/mateusz/good/poky/build/conf/local.conf', 'a') as file:
-                file.write(f'PREFERRED_VERSION_{args.recipename}="{args.version}"')
         
         standard._check_compatible_recipe(pn, rd)
         old_srcrev = rd.getVar('SRCREV')
@@ -574,15 +558,12 @@ def upgrade(args, config, basepath, workspace):
         #if old_ver == args.version and old_srcrev == args.srcrev:
             #raise DevtoolError("Current and upgrade versions are the same version")
         
+        new_dir = args.recipename + "_" + args.version
+
         if args.srctree:
             srctree = os.path.abspath(args.srctree + f'/{args.recipename}_{args.version}')
-            try:
-                os.rmdir(args.srctree + f'/{args.recipename}_{version}')
-                print(f'This dir has been deleted')
-            except:
-                print('There was an error, couldnt remove selected directory')
         else:
-            srctree = standard.get_default_srctree(config, args.recipename + "_" + str(args.version))
+            srctree = standard.get_default_srctree(config, new_dir)
 
         srctree_s = standard.get_real_srctree(srctree, rd.getVar('S'), rd.getVar('WORKDIR'))
           
@@ -599,7 +580,9 @@ def upgrade(args, config, basepath, workspace):
                                                     tinfoil, rd)
             new_licenses = _extract_licenses(srctree_s, (rd.getVar('LIC_FILES_CHKSUM') or ""))
             license_diff = _generate_license_diff(old_licenses, new_licenses)
-            rf, copied = _create_new_recipe(args.version, md5, sha256, args.srcrev, srcbranch, srcsubdir1, srcsubdir2, config.workspace_path, tinfoil, rd, license_diff, new_licenses, srctree, args.keep_failure)
+            rf, copied = _create_new_recipe(args.version, md5, sha256, args.srcrev, srcbranch, srcsubdir1, srcsubdir2, config.workspace_path, tinfoil, rd, license_diff, new_licenses, os.path.join(srctree, args.recipename + '_' + args.version + '.bb'), args.keep_failure)
+            
+            
         except (bb.process.CmdError, DevtoolError) as e:
             recipedir = os.path.join(config.workspace_path, 'recipes', rd.getVar('BPN'))
             _upgrade_error(e, recipedir, srctree, args.keep_failure)
@@ -620,18 +603,7 @@ def upgrade(args, config, basepath, workspace):
             logger.warning('Version is pinned to %s via PREFERRED_VERSION; it may need adjustment to match the new version before any further steps are taken' % preferred_version)
     finally:
         tinfoil.shutdown()
-    filename = 'my_variable.pkl'
-    if os.path.getsize(filename) > 0:
-        with open(filename, 'rb') as f:
-            my_variable = pickle.load(f)
-    else:
-        my_variable = {}
-    workspace[args.recipename + "_" + version] = {'srctreebase': srctreebase, 'srctree': srctree, 'bbappend': appendfile, 'recipefile': recipefile}    
     
-    if args.recipename + "_" + version not in my_variable:
-        with open(filename, 'wb') as f:
-            my_variable[args.recipename + "_" + version] = workspace[args.recipename + "_" + version]
-            pickle.dump(my_variable, f)
     return 0
 
 def latest_version(args, config, basepath, workspace):
@@ -655,9 +627,12 @@ def latest_version(args, config, basepath, workspace):
     return 0
 
 def check_upgrade_status(args, config, basepath, workspace):
+    	
     if not args.recipe:
         logger.info("Checking the upstream status for all recipes may take a few minutes")
+    
     results = oe.recipeutils.get_recipe_upgrade_status(args.recipe)
+    
     for result in results:
         # pn, update_status, current, latest, maintainer, latest_commit, no_update_reason
         if args.all or result[1] != 'MATCH':

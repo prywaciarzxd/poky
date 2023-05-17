@@ -81,13 +81,9 @@ def add(args, config, basepath, workspace):
             args.fetchuri = args.fetch
 
     if args.recipename:
-        if full_name in workspace:
-            raise DevtoolError("recipe %s is already in your workspace" %
-                               args.recipename)
-        reason = oe.recipeutils.validate_pn(args.recipename)
-        if reason:
-            raise DevtoolError(reason)
-
+        if full_name in workspace:   
+            raise DevtoolError("recipe %s is already in your workspace XPP")
+        
     if args.srctree:
         srctree = os.path.abspath(args.srctree + full_name)
         srctreeparent = None
@@ -297,8 +293,7 @@ def add(args, config, basepath, workspace):
 
     finally:
         tinfoil.shutdown()
-        #CHECKING ARE THE KEYS VALUES ARE OKAY not just apr but for example apr_1.7.2
-        print(workspace)
+        
     return 0
 
 def _check_compatible_recipe(pn, d):
@@ -885,6 +880,7 @@ def modify(args, config, basepath, workspace):
                 # Copy .config to workspace
                 kconfpath = rd.getVar('B')
                 logger.info('Copying kernel config to workspace')
+                print(srctree)
                 shutil.copy2(os.path.join(kconfpath, '.config'),srctree)
 
                 # Set this to true, we still need to get initial_rev
@@ -1007,20 +1003,6 @@ def modify(args, config, basepath, workspace):
     finally:
         tinfoil.shutdown()
     
-    filename = 'my_variable.pkl'
-    if os.path.getsize(filename) > 0:
-       with open(filename, 'rb') as f:
-            my_variable = pickle.load(f)
-    else:
-        my_variable = {}
-        
-    workspace[args.recipename + "_" + version] = {'srctreebase': srctreebase, 'srctree': srctree, 'bbappend': appendfile, 'recipefile': recipefile}    
-    
-    if args.recipename + "_" + version not in my_variable:
-        with open(filename, 'wb') as f:
-            my_variable[args.recipename + "_" + version] = workspace[args.recipename + "_" + version]
-            pickle.dump(my_variable, f)
-    
     return 0
 
 
@@ -1028,16 +1010,6 @@ def rename(args, config, basepath, workspace):
     """Entry point for the devtool 'rename' subcommand"""
     import bb
     import oe.recipeutils
-    workspace_1 = {}
-    for key,value in workspace.items():
-        if "_" not in key:
-            srctree_path = workspace[key]['srctree']
-            version = srctree_path.rsplit('/', 1)[-1].rsplit('_', 1)[-1]
-            new_key = key + "_" + version
-            workspace_1[key + "_" + version] = workspace[key]
-
-    workspace = workspace_1
-    workspace['vim_8.2']['recipefile'] = '/yocto/mateusz/good/poky/build/workspace/recipes/vim_7.4/vim_7.4.bb'
     
     if "_" in args.recipename and "_" in args.newname:
         old_version = args.recipename.split("_")[1]
@@ -1046,11 +1018,9 @@ def rename(args, config, basepath, workspace):
 
         new_version = args.newname.split("_")[1]
         args.newname = args.newname.split("_")[0]
-        new_full_name = args.newname + "_" + args.newname
+        new_full_name = args.newname + "_" + new_version
 
-    check_workspace_recipe(workspace, old_full_name)
     
-
     if not (args.newname or args.version):
         raise DevtoolError('You must specify a new name, a version with -V/--version, or both')
 
@@ -1058,13 +1028,13 @@ def rename(args, config, basepath, workspace):
     if not recipefile:
         raise DevtoolError('devtool rename can only be used where the recipe file itself is in the workspace (e.g. after devtool add)')
 
-    if args.newname and args.newname != args.recipename:
+    if args.newname != args.recipename:
         reason = oe.recipeutils.validate_pn(args.newname)
         if reason:
             raise DevtoolError(reason)
-        newname = args.newname
+        newname = new_full_name
     else:
-        newname = args.recipename
+        newname = new_full_name
 
     append = workspace[old_full_name]['bbappend']
     appendfn = os.path.splitext(os.path.basename(append))[0]
@@ -1077,22 +1047,23 @@ def rename(args, config, basepath, workspace):
     recipefilemd5 = None
     tinfoil = setup_tinfoil(basepath=basepath, tracking=True)
     try:
-        rd = parse_recipe(config, tinfoil, old_full_name, True)
+        rd = parse_recipe(config, tinfoil, args.recipename, True)
         if not rd:
             return 1
 
         bp = rd.getVar('BP')
         bpn = rd.getVar('BPN')
-        if newname != args.recipename:
+        if newname != old_full_name:
             localdata = rd.createCopy()
             localdata.setVar('PN', newname)
             newbpn = localdata.getVar('BPN')
         else:
             newbpn = bpn
+        
         s = rd.getVar('S', False)
         src_uri = rd.getVar('SRC_URI', False)
         pv = rd.getVar('PV')
-
+        
         # Correct variable values that refer to the upstream source - these
         # values must stay the same, so if the name/version are changing then
         # we need to fix them up
@@ -1128,13 +1099,10 @@ def rename(args, config, basepath, workspace):
     else:
         newver = origfnver
 
-    if newver:
-        newappend = '%s_%s.bbappend' % (newname, newver)
-        newfile =  '%s_%s.bb' % (newname, newver)
-    else:
-        newappend = '%s.bbappend' % newname
-        newfile = '%s.bb' % newname
-
+    newappend = '%s.bbappend' %  newname
+    newfile =  '%s.bb' % newname
+    
+        
     oldrecipedir = os.path.dirname(recipefile)
     newrecipedir = os.path.join(config.workspace_path, 'recipes', newname)
     if oldrecipedir != newrecipedir:
@@ -1153,8 +1121,9 @@ def rename(args, config, basepath, workspace):
     # Rename source tree if it's the default path
     appendmd5 = None
     if not args.no_srctree:
-        srctree = workspace[args.recipename]['srctree']
-        if os.path.abspath(srctree) == os.path.join(config.workspace_path, 'sources', args.recipename):
+        srctree = workspace[old_full_name]['srctree']
+        if os.path.abspath(srctree) == os.path.abspath(os.path.join(config.workspace_path, 'sources', old_full_name)):
+            print('here')
             newsrctree = os.path.join(config.workspace_path, 'sources', newname)
             logger.info('Renaming %s to %s' % (srctree, newsrctree))
             shutil.move(srctree, newsrctree)
@@ -1901,7 +1870,12 @@ def _update_recipe(recipename, workspace, rd, mode, appendlayerdir, wildcard_ver
 
 def update_recipe(args, config, basepath, workspace):
     """Entry point for the devtool 'update-recipe' subcommand"""
-    check_workspace_recipe(workspace, args.recipename)
+    if "_" in args.recipename:
+        version = args.recipename.split("_")[1]
+        args.recipename = args.recipename.split("_")[0]
+        full_name = args.recipename + "_" + version
+     
+    check_workspace_recipe(workspace, full_name)
     
     if args.append:
         if not os.path.exists(args.append):
@@ -1923,7 +1897,7 @@ def update_recipe(args, config, basepath, workspace):
         if args.dry_run:
             dry_run_output = tempfile.TemporaryDirectory(prefix='devtool')
             dry_run_outdir = dry_run_output.name
-        updated, _, _ = _update_recipe(args.recipename, workspace, rd, args.mode, args.append, args.wildcard_version, args.no_remove, args.initial_rev, dry_run_outdir=dry_run_outdir, no_overrides=args.no_overrides, force_patch_refresh=args.force_patch_refresh)
+        updated, _, _ = _update_recipe(full_name, workspace, rd, args.mode, args.append, args.wildcard_version, args.no_remove, args.initial_rev, dry_run_outdir=dry_run_outdir, no_overrides=args.no_overrides, force_patch_refresh=args.force_patch_refresh)
 
         if updated:
             rf = rd.getVar('FILE')
@@ -1949,18 +1923,8 @@ def does_recipe_exist():
 
 def status(args, config, basepath, workspace):
     """Entry point for the devtool 'status' subcommand"""
-    workspace_1 = {}
-    for key,value in workspace.items():
-        if "_" not in key:
-            srctree_path = workspace[key]['srctree']
-            version = srctree_path.rsplit('/', 1)[-1].rsplit('_', 1)[-1]
-            new_key = key + "_" + version
-            workspace_1[key + "_" + version] = workspace[key]
-            
-    workspace = workspace_1
-    print(workspace)
     if workspace:
-       for recipe, value in sorted(workspace.items()):
+        for recipe, value in sorted(workspace.items()):
            recipefile = value['recipefile']
            if recipefile:
                recipestr = ' (%s)' % recipefile
@@ -2087,7 +2051,7 @@ def reset(args, config, basepath, workspace):
             raise DevtoolError("Recipe cannot be specified if -a/--all is used")
         else:
             for recipe in args.recipename:
-                check_workspace_recipe(workspace, recipe, checksrc=False)
+                z = check_workspace_recipe(workspace, recipe, checksrc=False)
     elif not args.all:
         raise DevtoolError("Recipe must be specified, or specify -a/--all to "
                            "reset all recipes")
@@ -2095,7 +2059,7 @@ def reset(args, config, basepath, workspace):
         recipes = list(workspace.keys())
     else:
         recipes = args.recipename
-
+    
     _reset(recipes, args.no_clean, args.remove_work, config, basepath, workspace)
 
     return 0
@@ -2151,7 +2115,7 @@ def finish(args, config, basepath, workspace):
     remove_work=args.remove_work
     tinfoil = setup_tinfoil(basepath=basepath, tracking=True)
     try:
-        rd = parse_recipe(config, tinfoil, args.recipename, True)
+        rd = parse_recipe(config, tinfoil, args.recipename.split("_")[0], True)
         if not rd:
             return 1
 
