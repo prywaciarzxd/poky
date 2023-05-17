@@ -51,21 +51,26 @@ def build(args, config, basepath, workspace):
         args.recipename = args.recipename.split("_")[0]
         full_name = args.recipename + "_" + version
 
-    with open('/yocto/mateusz/good/poky/build/conf/local.conf', 'r') as file:
-        lines = file.readlines()
+        user_home_dir = os.path.expanduser("~")
+        path = os.path.join(user_home_dir, 'good/poky/build/conf/local.conf')
+        
+        with open(path, 'r') as file:
+            lines = file.readlines()
 
-    for i in range(len(lines)):
-        if lines[i].startswith(f'PREFERRED_VERSION_{args.recipename}'):
-            lines[i] = f'PREFERRED_VERSION_{args.recipename}="{version}"\n'
+        for i in range(len(lines)):
+            if lines[i].startswith(f'PREFERRED_VERSION_{args.recipename}'):
+                lines[i] = f'PREFERRED_VERSION_{args.recipename}="{version}"\n'
             does_exist = True
 
-    with open('/yocto/mateusz/good/poky/build/conf/local.conf', 'w') as file:
-        file.writelines(lines)
+        with open(path, 'w') as file:
+            file.writelines(lines)
 
-    if not(does_exist):
-        with open('/yocto/mateusz/good/poky/build/conf/local.conf', 'a') as file:
-            file.write(f'PREFERRED_VERSION_{args.recipename}="{version}"')
-
+        if not(does_exist):
+            with open(path, 'a') as file:
+                file.write(f'PREFERRED_VERSION_{args.recipename}="{version}"')
+    else:
+        full_name = args.recipename
+ 
     workspacepn = check_workspace_recipe(workspace, full_name, bbclassextend=True)
     tinfoil = setup_tinfoil(config_only=False, basepath=basepath)
     try:

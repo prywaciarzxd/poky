@@ -32,11 +32,14 @@ def add(args, config, basepath, workspace):
     """Entry point for the devtool 'add' subcommand"""
     import bb
     import oe.recipeutils
-    
+    version = None
+
     if "_" in args.recipename:
         version = args.recipename.split("_")[1]
         args.recipename = args.recipename.split("_")[0]
         full_name = args.recipename + "_" + version
+    else:
+        full_name = args.recipename
 
     if not args.recipename and not args.srctree and not args.fetch and not args.fetchuri:
         raise argparse_oe.ArgumentUsageError('At least one of recipename, srctree, fetchuri or -f/--fetch must be specified', 'add')
@@ -81,8 +84,8 @@ def add(args, config, basepath, workspace):
             args.fetchuri = args.fetch
 
     if args.recipename:
-        if full_name in workspace:   
-            raise DevtoolError("recipe %s is already in your workspace XPP")
+       if full_name in workspace:   
+           raise DevtoolError("recipe %s is already in your workspace" % full_name)
         
     if args.srctree:
         srctree = os.path.abspath(args.srctree + full_name)
@@ -171,7 +174,8 @@ def add(args, config, basepath, workspace):
         if recipes:
             recipename = os.path.splitext(os.path.basename(recipes[0]))[0].split('_')[0] 
             if full_name in workspace:
-                raise DevtoolError('A recipe with the same name as the one being created (%s) already exists in your workspace' % recipename)
+                raise DevtoolError('A recipe with the same name as the one being created (%s) already exists in your workspace' % full_name)
+            
             recipedir = os.path.join(config.workspace_path, 'recipes', full_name)
             bb.utils.mkdirhier(recipedir)
             recipefile = os.path.join(recipedir, os.path.basename(recipes[0]))
@@ -784,26 +788,29 @@ def modify(args, config, basepath, workspace):
     import oe.path
 
     does_Exist = False
+    if "_" in args.recipename:
+        split_me = args.recipename.split('_')
+        args.recipename = split_me[0]
+        version = split_me[1]
 
-    split_me = args.recipename.split('_')
-    args.recipename = split_me[0]
-    version = split_me[1]
-    
-    with open('/yocto/mateusz/good/poky/build/conf/local.conf', 'r') as file:
-        lines = file.readlines()
+        user_home_dir = os.path.expanduser("~")
+        path = os.path.join(user_home_dir, 'good/poky/build/conf/local.conf')
+      
+        with open(path, 'r') as file:
+            lines = file.readlines()
 
-    for i in range(len(lines)):
-       if lines[i].startswith(f'PREFERRED_VERSION_{args.recipename}'):
-           lines[i] = f'PREFERRED_VERSION_{args.recipename}="{version}"\n'
-           does_Exist = True
+        for i in range(len(lines)):
+           if lines[i].startswith(f'PREFERRED_VERSION_{args.recipename}'):
+               lines[i] = f'PREFERRED_VERSION_{args.recipename}="{version}"\n'
+               does_Exist = True
     
 # Zapisujemy zmienioną zawartość pliku
-    with open('/yocto/mateusz/good/poky/build/conf/local.conf', 'w') as file:
-        file.writelines(lines)
+        with open(path, 'w') as file:
+            file.writelines(lines)
     
-    if does_Exist == False:
-       with open('/yocto/mateusz/good/poky/build/conf/local.conf', 'a') as file:
-           file.write(f'PREFERRED_VERSION_{args.recipename}="{version}"\n')
+        if does_Exist == False:
+           with open(path, 'a') as file:
+               file.write(f'PREFERRED_VERSION_{args.recipename}="{version}"\n')
         
    
     tinfoil = setup_tinfoil(basepath=basepath, tracking=True)
@@ -814,7 +821,7 @@ def modify(args, config, basepath, workspace):
             return 1
    
         pn = rd.getVar('PN')
-        pv = split_me[1]
+        pv = rd.getVar('PV')
         name = pn + "_" + pv	        
         if args.srctree:
            srctree = os.path.abspath(args.srctree + f'/{name}')
@@ -1019,7 +1026,8 @@ def rename(args, config, basepath, workspace):
         new_version = args.newname.split("_")[1]
         args.newname = args.newname.split("_")[0]
         new_full_name = args.newname + "_" + new_version
-
+        
+        
     
     if not (args.newname or args.version):
         raise DevtoolError('You must specify a new name, a version with -V/--version, or both')

@@ -510,7 +510,9 @@ def upgrade(args, config, basepath, workspace):
         version = args.recipename.split("_")[1]
         args.recipename = args.recipename.split("_")[0]
         full_name = args.recipename + "_" + version
-
+    else:
+        version = None
+        full_name = args.recipename
     
     
     if args.srcbranch and not args.srcrev:
@@ -525,12 +527,15 @@ def upgrade(args, config, basepath, workspace):
             return 1
 
         pn = rd.getVar('PN')
-                
+        pv = rd.getVar('PV')        
         if pn != args.recipename:
             logger.info('Mapping %s to %s' % (args.recipename, pn))
-        
-        old_ver = version
-        
+        if version:
+            old_ver = version
+        else:
+            old_ver = pv
+
+
         # try to automatically discover latest version and revision if not provided on command line
         if not args.version and not args.srcrev:
             version_info = oe.recipeutils.get_recipe_upstream_version(rd)
@@ -558,11 +563,12 @@ def upgrade(args, config, basepath, workspace):
         #if old_ver == args.version and old_srcrev == args.srcrev:
             #raise DevtoolError("Current and upgrade versions are the same version")
         
-        new_dir = args.recipename + "_" + args.version
+        
 
         if args.srctree:
             srctree = os.path.abspath(args.srctree + f'/{args.recipename}_{args.version}')
         else:
+            new_dir = args.recipename + "_" + args.version
             srctree = standard.get_default_srctree(config, new_dir)
 
         srctree_s = standard.get_real_srctree(srctree, rd.getVar('S'), rd.getVar('WORKDIR'))
