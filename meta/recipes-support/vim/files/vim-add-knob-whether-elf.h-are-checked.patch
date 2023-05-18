@@ -19,8 +19,8 @@ Index: git/src/configure.ac
 --- git.orig/src/configure.ac
 +++ git/src/configure.ac
 @@ -3264,11 +3264,18 @@ AC_TRY_COMPILE([#include <stdio.h>], [in
-        AC_MSG_RESULT(no))
-
+ 	AC_MSG_RESULT(no))
+ 
  dnl Checks for header files.
 +AC_MSG_CHECKING(whether or not to look for elf.h)
 +AC_ARG_ENABLE(elf-check,
@@ -34,5 +34,6 @@ Index: git/src/configure.ac
    AC_CHECK_LIB(elf, main)
  fi
 +fi
-
+ 
  AC_HEADER_DIRENT
+ 

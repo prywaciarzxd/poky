@@ -1,5 +1,6 @@
 SUMMARY = "Vi IMproved - enhanced vi editor"
-#DESCRIPTION = "Vim is a greatly improved version of the good old UNIX editor Vi. Many new features have been added: multi-level undo, syntax highlighting, command line history, on-line help, spell checking, filename completion, block op>SECTION = "console/utils"
+DESCRIPTION = "Vim is a greatly improved version of the good old UNIX editor Vi. Many new features have been added: multi-level undo, syntax highlighting, command line history, on-line help, spell checking, filename completion, block operations, script language, etc. There is also a Graphical User Interface (GUI) available."
+SECTION = "console/utils"
 
 HOMEPAGE = "https://www.vim.org/"
 BUGTRACKER = "https://github.com/vim/vim/issues"
@@ -105,7 +106,7 @@ do_install() {
     chmod -x ${D}${datadir}/${BPN}/${VIMDIR}/tools/mve.awk
     chmod -x ${D}${datadir}/${BPN}/${VIMDIR}/tools/*.pl
     chmod -x ${D}${datadir}/${BPN}/${VIMDIR}/tools/*.py
-
+    
     # Install example vimrc from runtime files
     install -m 0644 runtime/vimrc_example.vim ${D}/${datadir}/${BPN}/vimrc
 
@@ -113,10 +114,10 @@ do_install() {
     mv ${D}${bindir}/${BPN} ${D}${bindir}/${BPN}.${BPN}
 
     if ${@bb.utils.contains('DISTRO_FEATURES', 'x11', 'true', 'false', d)}; then
-        # The mouse being autoenabled is just annoying in xfce4-terminal (mouse
-        # drag make vim go into visual mode and there is no right click menu),
-        # delete the block.
-        sed -i '/the mouse works just fine/,+4d' ${D}/${datadir}/${BPN}/vimrc
+	# The mouse being autoenabled is just annoying in xfce4-terminal (mouse
+	# drag make vim go into visual mode and there is no right click menu),
+	# delete the block.
+	sed -i '/the mouse works just fine/,+4d' ${D}/${datadir}/${BPN}/vimrc
     fi
 }
 
@@ -155,11 +156,3 @@ ALTERNATIVE_PRIORITY = "100"
 ALTERNATIVE_TARGET = "${bindir}/${BPN}.${BPN}"
 ALTERNATIVE_LINK_NAME[vi] = "${base_bindir}/vi"
 ALTERNATIVE_LINK_NAME[vim] = "${bindir}/vim"
-
-
-
-
-
-
-
-

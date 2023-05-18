@@ -45,12 +45,11 @@ def build(args, config, basepath, workspace):
     """Entry point for the devtool 'build' subcommand"""
     
     does_exist = False
-
+    
     if "_" in args.recipename:
         version = args.recipename.split("_")[1]
         args.recipename = args.recipename.split("_")[0]
         full_name = args.recipename + "_" + version
-
         user_home_dir = os.path.expanduser("~")
         path = os.path.join(user_home_dir, 'good/poky/build/conf/local.conf')
         
@@ -75,6 +74,8 @@ def build(args, config, basepath, workspace):
     tinfoil = setup_tinfoil(config_only=False, basepath=basepath)
     try:
         rd = parse_recipe(config, tinfoil, args.recipename, appends=True, filter_workspace=False)
+        d.setVar('TOPDIR', os.path.expanduser("~"))
+        print(d.getVar('TOPDIR'))
         if not rd:
             return 1
         deploytask = 'do_deploy' in rd.getVar('__BBTASKS')

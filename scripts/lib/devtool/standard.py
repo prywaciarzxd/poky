@@ -8,7 +8,6 @@
 import re
 import os
 import sys
-import re
 import shutil
 import subprocess
 import tempfile
@@ -786,15 +785,16 @@ def modify(args, config, basepath, workspace):
     import oe.recipeutils
     import oe.patch
     import oe.path
-
+    
+    print(d)
     does_Exist = False
     if "_" in args.recipename:
         split_me = args.recipename.split('_')
         args.recipename = split_me[0]
         version = split_me[1]
 
-        user_home_dir = os.path.expanduser("~")
-        path = os.path.join(user_home_dir, 'good/poky/build/conf/local.conf')
+        current_directory = os.getcwd()
+        path = os.path.join(current_directory, 'conf/local.conf')
       
         with open(path, 'r') as file:
             lines = file.readlines()
@@ -819,7 +819,7 @@ def modify(args, config, basepath, workspace):
         
         if not rd:
             return 1
-   
+          
         pn = rd.getVar('PN')
         pv = rd.getVar('PV')
         name = pn + "_" + pv	        
@@ -1916,18 +1916,6 @@ def update_recipe(args, config, basepath, workspace):
 
     return 0
 
-def does_recipe_exist():
-    filename = 'my_variable.pkl'
-    keys_to_delete = []
-    with open(filename, 'rb') as f:
-        workspace = pickle.load(f)
-    for key in workspace.keys():
-        if not os.path.exists(f'/yocto/mateusz/good/poky/build/workspace/sources/{key}'):
-            keys_to_delete.append(key)
-    for key in keys_to_delete:
-        del workspace[key]
-    
-    return workspace    
 
 def status(args, config, basepath, workspace):
     """Entry point for the devtool 'status' subcommand"""
