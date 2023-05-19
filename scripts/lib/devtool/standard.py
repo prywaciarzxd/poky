@@ -411,13 +411,34 @@ def _ls_tree(directory):
 def extract(args, config, basepath, workspace):
     """Entry point for the devtool 'extract' subcommand"""
     import bb
+    
+    if "_" in args.recipename: 
+        user_home_dir = os.path.expanduser("~")
+        path = os.path.join(user_home_dir, 'good/poky/build/conf/local.conf')
+        does_Exist = False
+
+        with open(path, 'r') as file:
+            lines = file.readlines()
+
+        for i in range(len(lines)):
+           if lines[i].startswith(f'PREFERRED_VERSION_{args.recipename}'):
+               lines[i] = f'PREFERRED_VERSION_{args.recipename}="{args.recipename.split("_")[1]}"\n'
+               does_Exist = True
+    
+# Zapisujemy zmienioną zawartość pliku
+        with open(path, 'w') as file:
+            file.writelines(lines)
+    
+        if does_Exist == False:
+           with open(path, 'a') as file:
+               file.write(f'PREFERRED_VERSION_{args.recipename}="{args.recipename.split("_")[1]}"\n')
 
     tinfoil = setup_tinfoil(basepath=basepath, tracking=True)
     if not tinfoil:
         # Error already shown
         return 1
     try:
-        rd = parse_recipe(config, tinfoil, args.recipename, True)
+        rd = parse_recipe(config, tinfoil, args.recipename.split("_")[0], True)
         if not rd:
             return 1
 
@@ -441,7 +462,7 @@ def sync(args, config, basepath, workspace):
         # Error already shown
         return 1
     try:
-        rd = parse_recipe(config, tinfoil, args.recipename, True)
+        rd = parse_recipe(config, tinfoil, args.recipename.split("_")[0], True)
         if not rd:
             return 1
 
@@ -786,15 +807,17 @@ def modify(args, config, basepath, workspace):
     import oe.patch
     import oe.path
     
-    print(d)
+    
     does_Exist = False
     if "_" in args.recipename:
         split_me = args.recipename.split('_')
         args.recipename = split_me[0]
         version = split_me[1]
+         
+        user_home_dir = os.path.expanduser("~")
+        path = os.path.join(user_home_dir, 'good/poky/build/conf/local.conf')
 
-        current_directory = os.getcwd()
-        path = os.path.join(current_directory, 'conf/local.conf')
+                
       
         with open(path, 'r') as file:
             lines = file.readlines()
@@ -887,7 +910,6 @@ def modify(args, config, basepath, workspace):
                 # Copy .config to workspace
                 kconfpath = rd.getVar('B')
                 logger.info('Copying kernel config to workspace')
-                print(srctree)
                 shutil.copy2(os.path.join(kconfpath, '.config'),srctree)
 
                 # Set this to true, we still need to get initial_rev
@@ -1131,7 +1153,6 @@ def rename(args, config, basepath, workspace):
     if not args.no_srctree:
         srctree = workspace[old_full_name]['srctree']
         if os.path.abspath(srctree) == os.path.abspath(os.path.join(config.workspace_path, 'sources', old_full_name)):
-            print('here')
             newsrctree = os.path.join(config.workspace_path, 'sources', newname)
             logger.info('Renaming %s to %s' % (srctree, newsrctree))
             shutil.move(srctree, newsrctree)
@@ -1971,6 +1992,11 @@ def _reset(recipes, no_clean, remove_work, config, basepath, workspace):
             if recipefile and os.path.exists(recipefile):
                 targets.extend(get_bbclassextend_targets(recipefile, recipe))
         try:
+            for target in targets:
+                if "_" in target:
+                    tmp = target.split("_")[0]
+                targets[0] = tmp
+            
             exec_build_env_command(config.init_path, basepath, 'bitbake -c clean %s' % ' '.join(targets))
         except bb.process.ExecutionError as e:
             raise DevtoolError('Command \'%s\' failed, output:\n%s\nIf you '
@@ -2055,6 +2081,7 @@ def reset(args, config, basepath, workspace):
         recipes = list(workspace.keys())
     else:
         recipes = args.recipename
+    
     
     _reset(recipes, args.no_clean, args.remove_work, config, basepath, workspace)
 
@@ -2185,7 +2212,7 @@ def finish(args, config, basepath, workspace):
                         os.remove(fnp)
                     except FileNotFoundError:
                         pass
-
+        
         if origlayerdir == config.workspace_path and destpath:
             # Recipe file itself is in the workspace - need to move it and any
             # associated files to the specified layer
