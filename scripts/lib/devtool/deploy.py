@@ -155,7 +155,7 @@ def deploy(args, config, basepath, workspace):
     tinfoil = setup_tinfoil(basepath=basepath)
     try:
         try:
-            rd = tinfoil.parse_recipe(args.recipename)
+            rd = tinfoil.parse_recipe(args.recipename.split("_")[0])
         except Exception as e:
             raise DevtoolError('Exception parsing recipe %s: %s' %
                             (args.recipename, e))
