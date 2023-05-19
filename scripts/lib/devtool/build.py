@@ -13,7 +13,7 @@ import argparse
 import tempfile
 from devtool import exec_build_env_command, setup_tinfoil, check_workspace_recipe, DevtoolError
 from devtool import parse_recipe
-
+git
 logger = logging.getLogger('devtool')
 
 
@@ -74,11 +74,11 @@ def build(args, config, basepath, workspace):
     tinfoil = setup_tinfoil(config_only=False, basepath=basepath)
     try:
         rd = parse_recipe(config, tinfoil, args.recipename, appends=True, filter_workspace=False)
-        d.setVar('TOPDIR', os.path.expanduser("~"))
-        print(d.getVar('TOPDIR'))
+        
         if not rd:
             return 1
         deploytask = 'do_deploy' in rd.getVar('__BBTASKS')
+        
     finally:
         tinfoil.shutdown()
 
