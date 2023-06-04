@@ -8,12 +8,13 @@
 
 import os
 import bb
+import re
 import logging
 import argparse
 import tempfile
 from devtool import exec_build_env_command, setup_tinfoil, check_workspace_recipe, DevtoolError
 from devtool import parse_recipe
-git
+
 logger = logging.getLogger('devtool')
 
 
@@ -41,44 +42,46 @@ def _get_build_tasks(config):
     tasks = config.get('Build', 'build_task', 'populate_sysroot,packagedata').split(',')
     return ['do_%s' % task.strip() for task in tasks]
 
+
 def build(args, config, basepath, workspace):
     """Entry point for the devtool 'build' subcommand"""
+    recipenames = " ".join(args.recipename.split(","))  # Łączymy argumenty przekazane jako lista w jeden ciąg znaków
+    all_recipes = []
+    for recipename in recipenames.split():
+        if "_" in recipename:
+            version = recipename.split("_")[1]
+            recipename = recipename.split("_")[0]
+            full_name = recipename + "_" + version
+            all_recipes.append({full_name: {'version': version, 'recipename': recipename, 'full_name': full_name}})
+        else:
+            full_name = recipename
+            all_recipes.append({full_name: {'version': '', 'recipename': recipename, 'full_name': full_name}})
     
-    does_exist = False
-    
-    if "_" in args.recipename:
-        version = args.recipename.split("_")[1]
-        args.recipename = args.recipename.split("_")[0]
-        full_name = args.recipename + "_" + version
-        user_home_dir = os.path.expanduser("~")
-        path = os.path.join(user_home_dir, 'good/poky/build/conf/local.conf')
-        
-        with open(path, 'r') as file:
-            lines = file.readlines()
+    for recipe in all_recipes:
+        for key in recipe.keys():
+            check_workspace_recipe(workspace, key, bbclassextend=True)
 
-        for i in range(len(lines)):
-            if lines[i].startswith(f'PREFERRED_VERSION_{args.recipename}'):
-                lines[i] = f'PREFERRED_VERSION_{args.recipename}="{version}"\n'
-            does_exist = True
-
-        with open(path, 'w') as file:
-            file.writelines(lines)
-
-        if not(does_exist):
-            with open(path, 'a') as file:
-                file.write(f'PREFERRED_VERSION_{args.recipename}="{version}"')
-    else:
-        full_name = args.recipename
- 
-    workspacepn = check_workspace_recipe(workspace, full_name, bbclassextend=True)
     tinfoil = setup_tinfoil(config_only=False, basepath=basepath)
     try:
-        rd = parse_recipe(config, tinfoil, args.recipename, appends=True, filter_workspace=False)
-        
+        rd = []
+        for recipe in all_recipes:
+            for value in recipe.values():
+                rd.append(parse_recipe(config, tinfoil, value['recipename'], appends=True, filter_workspace=False))
         if not rd:
             return 1
-        deploytask = 'do_deploy' in rd.getVar('__BBTASKS')
+        for rd in rd:
+            deploytask = ('do_deploy' in rd.getVar('__BBTASKS'))
+            devtoolconf = (os.path.join(rd.getVar('TMPDIR'), 'devtool-tmp.conf'))
         
+        for recipe in all_recipes:
+            for value in recipe.values():
+                some_string_check = f'PREFERRED_VERSION_{value["recipename"]}='
+                some_string = some_string_check + '"' + value['version'] + '"'
+                with open(devtoolconf, 'r+') as file:
+                    file_content = file.read()
+                    if some_string_check not in file_content:
+                        file.write(some_string + "\n")
+                    
     finally:
         tinfoil.shutdown()
 
@@ -89,26 +92,22 @@ def build(args, config, basepath, workspace):
         build_tasks = _get_build_tasks(config)
         if deploytask:
             build_tasks.append('do_deploy')
-
-    bbappend = workspace[workspacepn]['bbappend']
-    if args.disable_parallel_make:
-        logger.info("Disabling 'make' parallelism")
-        _set_file_values(bbappend, {'PARALLEL_MAKE': ''})
+            
     try:
         bbargs = []
         for task in build_tasks:
-            if args.recipename.endswith('-native') and 'package' in task:
+            if any(recipename.endswith('-native') and 'package' in task for recipename in recipenames):
                 continue
-            bbargs.append('%s:%s' % (args.recipename, task))
-        exec_build_env_command(config.init_path, basepath, 'bitbake %s' % ' '.join(bbargs), watch=True)
+            for recipe in all_recipes:
+                for value in recipe.values():
+                    bbargs.append('%s:%s' % (value["recipename"], task))
+        exec_build_env_command(config.init_path, basepath, 'bitbake -R %s %s' % (devtoolconf, ' '.join(bbargs)), watch=True)
     except bb.process.ExecutionError as e:
         # We've already seen the output since watch=True, so just ensure we return something to the user
         return e.exitcode
-    finally:
-        if args.disable_parallel_make:
-            _set_file_values(bbappend, {'PARALLEL_MAKE': None})
 
     return 0
+
 
 def register_commands(subparsers, context):
     """Register devtool subcommands from this plugin"""
