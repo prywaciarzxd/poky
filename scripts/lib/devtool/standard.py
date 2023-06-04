@@ -5,6 +5,8 @@
 # SPDX-License-Identifier: GPL-2.0-only
 #
 """Devtool standard plugins"""
+
+import bb
 import re
 import os
 import sys
@@ -18,7 +20,9 @@ import scriptutils
 import errno
 import glob
 import filecmp
-import pickle
+import oe.recipeutils
+import oe.patch
+import oe.path
 from collections import OrderedDict
 from devtool import exec_build_env_command, setup_tinfoil, check_workspace_recipe, use_external_build, setup_git_repo, recipe_to_append, get_bbclassextend_targets, update_unlockedsigs, check_prerelease_version, check_git_repo_dirty, check_git_repo_op, DevtoolError
 from devtool import parse_recipe
@@ -29,10 +33,7 @@ override_branch_prefix = 'devtool-override-'
     
 def add(args, config, basepath, workspace):
     """Entry point for the devtool 'add' subcommand"""
-    import bb
-    import oe.recipeutils
-    version = None
-
+    
     if "_" in args.recipename:
         version = args.recipename.split("_")[1]
         args.recipename = args.recipename.split("_")[0]
@@ -82,9 +83,9 @@ def add(args, config, basepath, workspace):
             logger.warning('-f/--fetch option is deprecated - you can now simply specify the URL to fetch as a positional argument instead')
             args.fetchuri = args.fetch
 
-    if args.recipename:
-       if full_name in workspace:   
-           raise DevtoolError("recipe %s is already in your workspace" % full_name)
+    
+    if full_name in workspace:   
+        raise DevtoolError("recipe %s is already in your workspace" % full_name)
         
     if args.srctree:
         srctree = os.path.abspath(args.srctree + full_name)
@@ -174,7 +175,6 @@ def add(args, config, basepath, workspace):
             recipename = os.path.splitext(os.path.basename(recipes[0]))[0].split('_')[0] 
             if full_name in workspace:
                 raise DevtoolError('A recipe with the same name as the one being created (%s) already exists in your workspace' % full_name)
-            
             recipedir = os.path.join(config.workspace_path, 'recipes', full_name)
             bb.utils.mkdirhier(recipedir)
             recipefile = os.path.join(recipedir, os.path.basename(recipes[0]))
@@ -802,50 +802,26 @@ def get_real_srctree(srctree, s, workdir):
 
 def modify(args, config, basepath, workspace):
     """Entry point for the devtool 'modify' subcommand"""
-    import bb
-    import oe.recipeutils
-    import oe.patch
-    import oe.path
     
-    
-    does_Exist = False
     if "_" in args.recipename:
         split_me = args.recipename.split('_')
         args.recipename = split_me[0]
         version = split_me[1]
+    else:
+        version = None
          
-        user_home_dir = os.path.expanduser("~")
-        path = os.path.join(user_home_dir, 'good/poky/build/conf/local.conf')
-
-                
-      
-        with open(path, 'r') as file:
-            lines = file.readlines()
-
-        for i in range(len(lines)):
-           if lines[i].startswith(f'PREFERRED_VERSION_{args.recipename}'):
-               lines[i] = f'PREFERRED_VERSION_{args.recipename}="{version}"\n'
-               does_Exist = True
-    
-# Zapisujemy zmienioną zawartość pliku
-        with open(path, 'w') as file:
-            file.writelines(lines)
-    
-        if does_Exist == False:
-           with open(path, 'a') as file:
-               file.write(f'PREFERRED_VERSION_{args.recipename}="{version}"\n')
-        
-   
     tinfoil = setup_tinfoil(basepath=basepath, tracking=True)
     try:
         rd = parse_recipe(config, tinfoil, args.recipename, True)
-        
         if not rd:
             return 1
-          
+
         pn = rd.getVar('PN')
+        if version != None:
+            rd.setVar('PV', version)
         pv = rd.getVar('PV')
-        name = pn + "_" + pv	        
+        name = pn + "_" + pv
+
         if args.srctree:
            srctree = os.path.abspath(args.srctree + f'/{name}')
         else:
@@ -1037,8 +1013,6 @@ def modify(args, config, basepath, workspace):
 
 def rename(args, config, basepath, workspace):
     """Entry point for the devtool 'rename' subcommand"""
-    import bb
-    import oe.recipeutils
     
     if "_" in args.recipename and "_" in args.newname:
         old_version = args.recipename.split("_")[1]
@@ -1049,8 +1023,6 @@ def rename(args, config, basepath, workspace):
         args.newname = args.newname.split("_")[0]
         new_full_name = args.newname + "_" + new_version
         
-        
-    
     if not (args.newname or args.version):
         raise DevtoolError('You must specify a new name, a version with -V/--version, or both')
 
@@ -1899,6 +1871,7 @@ def _update_recipe(recipename, workspace, rd, mode, appendlayerdir, wildcard_ver
 
 def update_recipe(args, config, basepath, workspace):
     """Entry point for the devtool 'update-recipe' subcommand"""
+
     if "_" in args.recipename:
         version = args.recipename.split("_")[1]
         args.recipename = args.recipename.split("_")[0]
@@ -2307,7 +2280,7 @@ def register_commands(subparsers, context):
     parser_add = subparsers.add_parser('add', help='Add a new recipe',
                                        description='Adds a new recipe to the workspace to build a specified source tree. Can optionally fetch a remote URI and unpack it to create the source tree.',
                                        group='starting', order=100)
-    parser_add.add_argument('recipename', nargs='?', help='Name for new recipe to add (just name - no version, path or extension). If not specified, will attempt to auto-detect it.')
+    parser_add.add_argument('recipename', nargs='?', help='Name for new recipe to add (specify version by using _ after recipename). If not specified, will attempt to auto-detect it.')
     parser_add.add_argument('srctree', nargs='?', help='Path to external source tree. If not specified, a subdirectory of %s will be used.' % defsrctree)
     parser_add.add_argument('fetchuri', nargs='?', help='Fetch the specified URI and extract it to create the source tree')
     group = parser_add.add_mutually_exclusive_group()
@@ -2331,7 +2304,7 @@ def register_commands(subparsers, context):
     parser_modify = subparsers.add_parser('modify', help='Modify the source for an existing recipe',
                                        description='Sets up the build environment to modify the source for an existing recipe. The default behaviour is to extract the source being fetched by the recipe into a git tree so you can work on it; alternatively if you already have your own pre-prepared source tree you can specify -n/--no-extract.',
                                        group='starting', order=90)
-    parser_modify.add_argument('recipename', help='Name of existing recipe to edit (just name - no version, path or extension)')
+    parser_modify.add_argument('recipename', help='Name of existing recipe to edit (specify version by using _ after recipename)')
     parser_modify.add_argument('srctree', nargs='?', help='Path to external source tree. If not specified, a subdirectory of %s will be used.' % defsrctree)
     parser_modify.add_argument('--wildcard', '-w', action="store_true", help='Use wildcard for unversioned bbappend')
     group = parser_modify.add_mutually_exclusive_group()
@@ -2368,7 +2341,7 @@ def register_commands(subparsers, context):
     parser_rename = subparsers.add_parser('rename', help='Rename a recipe file in the workspace',
                                        description='Renames the recipe file for a recipe in the workspace, changing the name or version part or both, ensuring that all references within the workspace are updated at the same time. Only works when the recipe file itself is in the workspace, e.g. after devtool add. Particularly useful when devtool add did not automatically determine the correct name.',
                                        group='working', order=10)
-    parser_rename.add_argument('recipename', help='Current name of recipe to rename')
+    parser_rename.add_argument('recipename', help='Current name of recipe to rename (optional, u can use _ in recipename to specify version)')
     parser_rename.add_argument('newname', nargs='?', help='New name for recipe (optional, not needed if you only want to change the version)')
     parser_rename.add_argument('--version', '-V', help='Change the version (NOTE: this does not change the version fetched by the recipe, just the version in the recipe file name)')
     parser_rename.add_argument('--no-srctree', '-s', action='store_true', help='Do not rename the source tree directory (if the default source tree path has been used) - keeping the old name may be desirable if there are internal/other external references to this path')
