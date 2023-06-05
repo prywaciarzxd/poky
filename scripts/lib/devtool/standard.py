@@ -803,12 +803,35 @@ def get_real_srctree(srctree, s, workdir):
 def modify(args, config, basepath, workspace):
     """Entry point for the devtool 'modify' subcommand"""
     
+    
+    does_Exist = False
+    
     if "_" in args.recipename:
         split_me = args.recipename.split('_')
         args.recipename = split_me[0]
         version = split_me[1]
+
+        current_directory = os.getcwd()
+        path = os.path.join(current_directory, 'conf/local.conf')
+      
+        with open(path, 'r') as file:
+            lines = file.readlines()
+
+        for i in range(len(lines)):
+           if lines[i].startswith(f'PREFERRED_VERSION_{args.recipename}'):
+               lines[i] = f'PREFERRED_VERSION_{args.recipename}="{version}"\n'
+               does_Exist = True
+    
+# Zapisujemy zmienioną zawartość pliku
+        with open(path, 'w') as file:
+            file.writelines(lines)
+    
+        if does_Exist == False:
+           with open(path, 'a') as file:
+               file.write(f'PREFERRED_VERSION_{args.recipename}="{version}"\n')
     else:
         version = None
+    
          
     tinfoil = setup_tinfoil(basepath=basepath, tracking=True)
     try:
@@ -817,8 +840,6 @@ def modify(args, config, basepath, workspace):
             return 1
 
         pn = rd.getVar('PN')
-        if version != None:
-            rd.setVar('PV', version)
         pv = rd.getVar('PV')
         name = pn + "_" + pv
 
