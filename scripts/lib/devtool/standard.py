@@ -1028,6 +1028,9 @@ def modify(args, config, basepath, workspace):
 
     finally:
         tinfoil.shutdown()
+        lines = lines[:-1]
+        with open(path, 'w') as file:
+            file.writelines(lines)
     
     return 0
 
