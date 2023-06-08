@@ -46,17 +46,38 @@ def _get_build_tasks(config):
 def build(args, config, basepath, workspace):
     """Entry point for the devtool 'build' subcommand"""
     
-    recipenames = " ".join(args.recipename.split(","))  # Łączymy argumenty przekazane jako lista w jeden ciąg znaków
+    
+    recipenames = " ".join(args.recipename.split(","))
     all_recipes = []
     for recipename in recipenames.split():
-        if "_" in recipename:
-            version = recipename.split("_")[1]
-            recipename = recipename.split("_")[0]
-            full_name = recipename + "_" + version
-            all_recipes.append({full_name: {'version': version, 'recipename': recipename, 'full_name': full_name}})
+        if "mc:" in recipename:
+            if "_" in recipename:
+                parts = recipename.split(':')
+                version = parts[2].split('_')[1]
+                recipename = parts[2].split('_')[0]
+                full_name = recipename + "_" + version
+                recipe_dict = {full_name:{
+                'version': version,
+                'recipename': recipename,
+                'full_name': full_name,
+                'arch': parts[1],
+                'mc': True
+            }
+            }
+                all_recipes.append(recipe_dict)
+            else:
+                parts = recipename.split(":")
+                full_name = parts[2]
+                all_recipes.append({full_name: {'version': '', 'recipename': recipename, 'full_name': full_name, 'arch': parts[1], 'mc': True}})
         else:
-            full_name = recipename
-            all_recipes.append({full_name: {'version': '', 'recipename': recipename, 'full_name': full_name}})
+            if "_" in recipename:
+                version = recipename.split("_")[1]
+                recipename = recipename.split("_")[0]
+                full_name = recipename + "_" + version
+                all_recipes.append({full_name: {'version': version, 'recipename': recipename, 'full_name': full_name, 'arch': 'standard', 'mc': False}})
+            else:
+                full_name = recipename
+                all_recipes.append({full_name: {'version': '', 'recipename': recipename, 'full_name': full_name, 'arch': 'standard', 'mc': False}})
     
     
     tmp = []
@@ -86,7 +107,7 @@ def build(args, config, basepath, workspace):
                     if max_key == key:
                         recipe[key]['version'] = max_value
     
-
+    
          
     for recipe in all_recipes:
         for key, value in recipe.items():
@@ -135,7 +156,10 @@ def build(args, config, basepath, workspace):
                 continue
             for recipe in all_recipes:
                 for value in recipe.values():
-                    bbargs.append('%s:%s' % (value["recipename"], task))
+                    if value['mc']:
+                        bbargs.append('mc:%s:%s:%s' % (value['arch'], value["recipename"], task))
+                    else:
+                        bbargs.append('%s:%s' % (value["recipename"], task))
         exec_build_env_command(config.init_path, basepath, 'bitbake -R %s %s' % (devtoolconf, ' '.join(bbargs)), watch=True)
     except bb.process.ExecutionError as e:
         # We've already seen the output since watch=True, so just ensure we return something to the user
