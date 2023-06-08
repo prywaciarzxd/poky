@@ -45,6 +45,7 @@ def _get_build_tasks(config):
 
 def build(args, config, basepath, workspace):
     """Entry point for the devtool 'build' subcommand"""
+    
     recipenames = " ".join(args.recipename.split(","))  # Łączymy argumenty przekazane jako lista w jeden ciąg znaków
     all_recipes = []
     for recipename in recipenames.split():
@@ -57,9 +58,41 @@ def build(args, config, basepath, workspace):
             full_name = recipename
             all_recipes.append({full_name: {'version': '', 'recipename': recipename, 'full_name': full_name}})
     
+    
+    tmp = []
+    
     for recipe in all_recipes:
         for key in recipe.keys():
-            check_workspace_recipe(workspace, key, bbclassextend=True)
+            if "_" not in key:
+                for workspace_key in workspace.keys():
+                    if workspace_key.startswith(key):
+                        tmp.append({workspace_key.split("_")[0]: workspace_key.split("_")[1]})
+
+    
+
+    najwyzsze_wersje = {}  # Słownik przechowujący najwyższe wersje dla każdego klucza
+
+    for slownik in tmp:
+        for klucz, wartosc in slownik.items():
+            if klucz not in najwyzsze_wersje or wartosc > najwyzsze_wersje[klucz]:
+                najwyzsze_wersje[klucz] = wartosc
+
+    slowniki_najwyzszych = [{klucz: wartosc} for klucz, wartosc in najwyzsze_wersje.items()]
+    
+    for recipe in all_recipes:
+        for key in recipe.keys():
+            for slownik in slowniki_najwyzszych:
+                for max_key, max_value in slownik.items():
+                    if max_key == key:
+                        recipe[key]['version'] = max_value
+    
+
+         
+    for recipe in all_recipes:
+        for key, value in recipe.items():
+            if "_" in value['full_name']:
+                check_workspace_recipe(workspace, key, bbclassextend=True)
+  
 
     tinfoil = setup_tinfoil(config_only=False, basepath=basepath)
     try:
@@ -79,11 +112,13 @@ def build(args, config, basepath, workspace):
                 some_string = some_string_check + '"' + value['version'] + '"'
                 with open(devtoolconf, 'r+') as file:
                     file_content = file.read()
-                    if some_string_check not in file_content:
+                    if some_string not in file_content:
                         file.write(some_string + "\n")
                     
     finally:
+        
         tinfoil.shutdown()
+        
 
     if args.clean:
         # use clean instead of cleansstate to avoid messing things up in eSDK
@@ -106,6 +141,8 @@ def build(args, config, basepath, workspace):
         # We've already seen the output since watch=True, so just ensure we return something to the user
         return e.exitcode
 
+    with open(devtoolconf, 'w') as file:
+            file.truncate(0)
     return 0
 
 
