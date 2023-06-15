@@ -659,7 +659,7 @@ class BBCooker:
         Prepare a runqueue and taskdata object for iteration over pkgs_to_build
         """
         bb.event.fire(bb.event.TreeDataPreparationStarted(), self.data)
-
+        print('xd')
         # A task of None means use the default task
         if task is None:
             task = self.configuration.cmd

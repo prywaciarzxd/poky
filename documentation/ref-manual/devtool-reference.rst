@@ -89,7 +89,7 @@ using ``--help``::
    Adds a new recipe to the workspace to build a specified source tree. Can optionally fetch a remote URI and unpack it to create the source tree.
 
    arguments:
-     recipename            Name for new recipe to add (just name - no version, path or extension). If not specified, will attempt to auto-detect it.
+     recipename            Name for new recipe to add (u can specify version using _). If not specified, will attempt to auto-detect it.
      srctree               Path to external source tree. If not specified, a subdirectory of /media/build1/poky/build/workspace/sources will be used.
      fetchuri              Fetch the specified URI and extract it to create the source tree
 

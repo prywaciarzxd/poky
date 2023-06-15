@@ -25,6 +25,7 @@ def _find_recipe_path(args, config, basepath, workspace):
         logger.warning('-a/--any-recipe option is now always active, and thus the option will be removed in a future release')
     if args.recipename in workspace:
         recipefile = workspace[args.recipename]['recipefile']
+        
     else:
         recipefile = None
     if not recipefile:
@@ -42,13 +43,11 @@ def _find_recipe_path(args, config, basepath, workspace):
 def find_recipe(args, config, basepath, workspace):
     """Entry point for the devtool 'find-recipe' subcommand"""
     recipefile = _find_recipe_path(args, config, basepath, workspace)
-    print(recipefile)
     return 0
 
 
 def edit_recipe(args, config, basepath, workspace):
     """Entry point for the devtool 'edit-recipe' subcommand"""
-    
     return scriptutils.run_editor(_find_recipe_path(args, config, basepath, workspace), logger)
 
 
