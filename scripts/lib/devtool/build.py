@@ -47,9 +47,8 @@ def build(args, config, basepath, workspace):
     """Entry point for the devtool 'build' subcommand"""
     
     
-    recipenames = " ".join(args.recipename.split(","))
     all_recipes = []
-    for recipename in recipenames.split():
+    for recipename in args.recipename:
         if "mc:" in recipename:
             if "_" in recipename:
                 parts = recipename.split(':')
@@ -67,7 +66,8 @@ def build(args, config, basepath, workspace):
                 all_recipes.append(recipe_dict)
             else:
                 parts = recipename.split(":")
-                full_name = parts[2]
+                recipename = parts[2] 
+                full_name = recipename
                 all_recipes.append({full_name: {'version': '', 'recipename': recipename, 'full_name': full_name, 'arch': parts[1], 'mc': True}})
         else:
             if "_" in recipename:
@@ -79,7 +79,6 @@ def build(args, config, basepath, workspace):
                 full_name = recipename
                 all_recipes.append({full_name: {'version': '', 'recipename': recipename, 'full_name': full_name, 'arch': 'standard', 'mc': False}})
     
-    
     tmp = []
     
     for recipe in all_recipes:
@@ -88,8 +87,6 @@ def build(args, config, basepath, workspace):
                 for workspace_key in workspace.keys():
                     if workspace_key.startswith(key):
                         tmp.append({workspace_key.split("_")[0]: workspace_key.split("_")[1]})
-
-    
 
     najwyzsze_wersje = {}  # Słownik przechowujący najwyższe wersje dla każdego klucza
 
@@ -107,14 +104,11 @@ def build(args, config, basepath, workspace):
                     if max_key == key:
                         recipe[key]['version'] = max_value
     
-    
-         
     for recipe in all_recipes:
         for key, value in recipe.items():
             if "_" in value['full_name']:
                 check_workspace_recipe(workspace, key, bbclassextend=True)
-  
-
+                
     tinfoil = setup_tinfoil(config_only=False, basepath=basepath)
     try:
         rd = []
@@ -140,7 +134,6 @@ def build(args, config, basepath, workspace):
         
         tinfoil.shutdown()
         
-
     if args.clean:
         # use clean instead of cleansstate to avoid messing things up in eSDK
         build_tasks = ['do_clean']
@@ -152,7 +145,7 @@ def build(args, config, basepath, workspace):
     try:
         bbargs = []
         for task in build_tasks:
-            if any(recipename.endswith('-native') and 'package' in task for recipename in recipenames):
+            if any(recipename.endswith('-native') and 'package' in task for recipename in args.recipename):
                 continue
             for recipe in all_recipes:
                 for value in recipe.values():
@@ -169,13 +162,12 @@ def build(args, config, basepath, workspace):
             file.truncate(0)
     return 0
 
-
 def register_commands(subparsers, context):
     """Register devtool subcommands from this plugin"""
     parser_build = subparsers.add_parser('build', help='Build a recipe',
                                          description='Builds the specified recipe using bitbake (up to and including %s)' % ', '.join(_get_build_tasks(context.config)),
                                          group='working', order=50)
-    parser_build.add_argument('recipename', help='Recipe to build')
+    parser_build.add_argument('recipename', nargs='+', help='Recipe(s) to build')  # Ustawienie nargs='+'
     parser_build.add_argument('-s', '--disable-parallel-make', action="store_true", help='Disable make parallelism')
     parser_build.add_argument('-c', '--clean', action='store_true', help='clean up recipe building results')
     parser_build.set_defaults(func=build)
