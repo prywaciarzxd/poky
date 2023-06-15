@@ -806,6 +806,7 @@ def modify(args, config, basepath, workspace):
     
     does_Exist = False
     
+    
     if "_" in args.recipename:
         split_me = args.recipename.split('_')
         args.recipename = split_me[0]
@@ -1028,9 +1029,10 @@ def modify(args, config, basepath, workspace):
 
     finally:
         tinfoil.shutdown()
-        lines = lines[:-1]
-        with open(path, 'w') as file:
-            file.writelines(lines)
+        if does_Exist:
+            lines = lines[:-1]
+            with open(path, 'w') as file:
+                file.writelines(lines)
     
     return 0
 
